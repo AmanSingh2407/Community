@@ -257,6 +257,26 @@ const Communities = () => {
     }
   };
 
+  const handleDeleteMessage = async (messageId) => {
+    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_URL}/api/communities/${selectedCommunity.id}/messages/${messageId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchChatMessages(selectedCommunity.id);
+      } else {
+        alert(data.error || 'Failed to delete message');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error deleting message');
+    }
+  };
+
   // Poll chat messages
   useEffect(() => {
     if (!selectedCommunity) return;
@@ -594,25 +614,47 @@ const Communities = () => {
                                 {msg.sender_name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </div>
 
-                              <div className={`p-3 rounded-2xl border text-xs leading-relaxed ${
-                                isSelf 
-                                  ? 'bg-indigo-600 border-indigo-550 text-white rounded-tr-none' 
-                                  : 'bg-slate-850 border-slate-800 text-slate-100 rounded-tl-none'
-                              }`}>
-                                {msg.message && <p>{msg.message}</p>}
-
-                                {/* Render images */}
-                                {msg.media_type === 'image' && msg.media_url && (
-                                  <div className="rounded-lg overflow-hidden border border-black/25 mt-2 max-w-xs">
-                                    <img src={`${API_URL}${msg.media_url}`} alt="Chat Attachment" className="w-full object-contain" />
-                                  </div>
+                              <div className="flex items-center gap-2 group">
+                                {!isSelf && (msg.user_id === user?.id || selectedCommunity.created_by === user?.id) && (
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    className="p-1 rounded bg-slate-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                                    title="Delete message"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 )}
 
-                                {/* Render videos */}
-                                {msg.media_type === 'video' && msg.media_url && (
-                                  <div className="rounded-lg overflow-hidden border border-black/25 mt-2 max-w-xs bg-black">
-                                    <video src={`${API_URL}${msg.media_url}`} controls className="w-full max-h-48 object-contain" />
-                                  </div>
+                                <div className={`p-3 rounded-2xl border text-xs leading-relaxed ${
+                                  isSelf 
+                                    ? 'bg-indigo-600 border-indigo-550 text-white rounded-tr-none' 
+                                    : 'bg-slate-850 border-slate-800 text-slate-100 rounded-tl-none'
+                                }`}>
+                                  {msg.message && <p>{msg.message}</p>}
+
+                                  {/* Render images */}
+                                  {msg.media_type === 'image' && msg.media_url && (
+                                    <div className="rounded-lg overflow-hidden border border-black/25 mt-2 max-w-xs">
+                                      <img src={`${API_URL}${msg.media_url}`} alt="Chat Attachment" className="w-full object-contain" />
+                                    </div>
+                                  )}
+
+                                  {/* Render videos */}
+                                  {msg.media_type === 'video' && msg.media_url && (
+                                    <div className="rounded-lg overflow-hidden border border-black/25 mt-2 max-w-xs bg-black">
+                                      <video src={`${API_URL}${msg.media_url}`} controls className="w-full max-h-48 object-contain" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {isSelf && (msg.user_id === user?.id || selectedCommunity.created_by === user?.id) && (
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    className="p-1 rounded bg-slate-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                                    title="Delete message"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 )}
                               </div>
                             </div>

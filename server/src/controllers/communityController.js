@@ -402,6 +402,41 @@ const sendCommunityMessage = async (req, res, next) => {
   }
 };
 
+// Delete a community chat message
+const deleteCommunityMessage = async (req, res, next) => {
+  try {
+    const { id: communityId, messageId } = req.params;
+    const userId = req.user.id;
+
+    // Check message existence and sender
+    const [msg] = await db.query(
+      'SELECT user_id FROM community_messages WHERE id = ? AND community_id = ?',
+      [messageId, communityId]
+    );
+
+    if (!msg[0]) {
+      return res.status(404).json({ success: false, error: 'Message not found' });
+    }
+
+    // Check if the current user is the community creator (admin)
+    const [comm] = await db.query('SELECT created_by FROM communities WHERE id = ?', [communityId]);
+    const isAdmin = comm[0] && comm[0].created_by === userId;
+
+    if (msg[0].user_id !== userId && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'You are not authorized to delete this message' });
+    }
+
+    await db.query(
+      'DELETE FROM community_messages WHERE id = ? AND community_id = ?',
+      [messageId, communityId]
+    );
+
+    res.json({ success: true, message: 'Message deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createCommunity,
   getCommunities,
@@ -411,5 +446,6 @@ module.exports = {
   approveJoinRequest,
   declineJoinRequest,
   getCommunityMessages,
-  sendCommunityMessage
+  sendCommunityMessage,
+  deleteCommunityMessage
 };

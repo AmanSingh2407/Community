@@ -10,7 +10,8 @@ const {
   approveJoinRequest,
   declineJoinRequest,
   getCommunityMessages,
-  sendCommunityMessage
+  sendCommunityMessage,
+  deleteCommunityMessage
 } = require('../controllers/communityController');
 const { verifyToken } = require('../middleware/authMiddleware');
 
@@ -54,5 +55,6 @@ router.post('/:id/requests/:userId/decline', verifyToken, declineJoinRequest);
 // Chat / Message Board Routes (Ephemeral 24h)
 router.get('/:id/messages', verifyToken, getCommunityMessages);
 router.post('/:id/messages', verifyToken, chatUpload, sendCommunityMessage);
+router.delete('/:id/messages/:messageId', verifyToken, deleteCommunityMessage);
 
 module.exports = router;
