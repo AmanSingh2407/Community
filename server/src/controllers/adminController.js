@@ -106,9 +106,48 @@ const getUsers = async (req, res, next) => {
   }
 };
 
+// Update a user's security role
+const updateUserRole = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body; // 'user', 'moderator', 'admin'
+    
+    if (!['user', 'moderator', 'admin'].includes(role)) {
+      return res.status(400).json({ success: false, error: 'Invalid security role' });
+    }
+
+    if (id === req.user.id) {
+      return res.status(400).json({ success: false, error: 'You cannot change your own admin role' });
+    }
+
+    await db.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+    res.json({ success: true, message: 'User role updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Delete a user account from database
+const deleteUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (id === req.user.id) {
+      return res.status(400).json({ success: false, error: 'You cannot delete your own admin account' });
+    }
+
+    await db.query('DELETE FROM users WHERE id = ?', [id]);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getReports,
   resolveReport,
-  getUsers
+  getUsers,
+  updateUserRole,
+  deleteUser
 };

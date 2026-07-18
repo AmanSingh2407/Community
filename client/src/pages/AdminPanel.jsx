@@ -103,6 +103,62 @@ const AdminPanel = () => {
     }
   };
 
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_URL}/api/admin/users/${userId}/role`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ role: newRole })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsersList(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+        fetchAdminStats();
+        alert('User role updated successfully!');
+      } else {
+        alert(data.error || 'Failed to update role');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update role');
+    }
+  };
+
+  const handleDeleteUser = async (userId, userName) => {
+    if (userId === user.id) {
+      alert('You cannot delete your own admin account.');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to permanently delete supporter "${userName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsersList(prev => prev.filter(u => u.id !== userId));
+        fetchAdminStats();
+        alert('User deleted successfully.');
+      } else {
+        alert(data.error || 'Failed to delete user');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete user');
+    }
+  };
+
   // Only allow Admin or Moderator role to access the panels
   if (user.role !== 'admin' && user.role !== 'moderator') {
     return (
@@ -119,7 +175,12 @@ const AdminPanel = () => {
       
       {/* KPI Cards section */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3">
+        <button
+          onClick={() => user.role === 'admin' && setActiveSubTab('users')}
+          className={`bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3 text-left transition-all active:scale-95 duration-200 ${
+            user.role === 'admin' ? 'hover:border-indigo-500/50 hover:bg-slate-850/40 cursor-pointer' : 'cursor-default'
+          }`}
+        >
           <div className="w-10 h-10 bg-indigo-500/10 text-indigo-400 rounded-xl flex items-center justify-center flex-shrink-0">
             <Users className="w-5 h-5" />
           </div>
@@ -127,9 +188,12 @@ const AdminPanel = () => {
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Supporters</span>
             <span className="text-base font-extrabold text-white tabular-nums">{stats.totalSupporters.toLocaleString()}</span>
           </div>
-        </div>
+        </button>
 
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3">
+        <button
+          onClick={() => setActiveSubTab('moderation')}
+          className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3 text-left transition-all hover:border-rose-500/50 hover:bg-slate-850/40 active:scale-95 duration-200 cursor-pointer"
+        >
           <div className="w-10 h-10 bg-rose-500/10 text-rose-400 rounded-xl flex items-center justify-center flex-shrink-0">
             <AlertTriangle className="w-5 h-5" />
           </div>
@@ -137,9 +201,14 @@ const AdminPanel = () => {
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Active Reports</span>
             <span className="text-base font-extrabold text-white tabular-nums">{stats.activeReports}</span>
           </div>
-        </div>
+        </button>
 
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3">
+        <button
+          onClick={() => user.role === 'admin' && setActiveSubTab('users')}
+          className={`bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3 text-left transition-all active:scale-95 duration-200 ${
+            user.role === 'admin' ? 'hover:border-emerald-500/50 hover:bg-slate-850/40 cursor-pointer' : 'cursor-default'
+          }`}
+        >
           <div className="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center flex-shrink-0">
             <TrendingUp className="w-5 h-5" />
           </div>
@@ -147,9 +216,12 @@ const AdminPanel = () => {
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Joined Today</span>
             <span className="text-base font-extrabold text-white tabular-nums">+{stats.newUsersToday}</span>
           </div>
-        </div>
+        </button>
 
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3">
+        <button
+          onClick={() => setActiveSubTab('moderation')}
+          className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3 text-left transition-all hover:border-amber-500/50 hover:bg-slate-850/40 active:scale-95 duration-200 cursor-pointer"
+        >
           <div className="w-10 h-10 bg-amber-500/10 text-amber-400 rounded-xl flex items-center justify-center flex-shrink-0">
             <Shield className="w-5 h-5" />
           </div>
@@ -157,7 +229,7 @@ const AdminPanel = () => {
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Pending Actions</span>
             <span className="text-base font-extrabold text-white tabular-nums">{stats.pendingModeration}</span>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Admin Tab Switchers */}
@@ -272,6 +344,7 @@ const AdminPanel = () => {
                       <th className="px-5 py-3">Email</th>
                       <th className="px-5 py-3">City</th>
                       <th className="px-5 py-3">Security Role</th>
+                      <th className="px-5 py-3 text-right pr-8">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-850">
@@ -279,7 +352,7 @@ const AdminPanel = () => {
                       <tr key={usr.id} className="hover:bg-slate-850/20 text-slate-300">
                         <td className="px-5 py-4 font-bold text-white">{usr.name}</td>
                         <td className="px-5 py-4 text-slate-400">{usr.email}</td>
-                        <td className="px-5 py-4">{usr.city}</td>
+                        <td className="px-5 py-4">{usr.city || 'Leh'}</td>
                         <td className="px-5 py-4">
                           <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider ${
                             usr.role === 'admin' 
@@ -290,6 +363,33 @@ const AdminPanel = () => {
                           }`}>
                             {usr.role}
                           </span>
+                        </td>
+                        <td className="px-5 py-4 flex items-center justify-end gap-2 pr-6">
+                          {/* Role Picker (Edit role option) */}
+                          <select
+                            value={usr.role}
+                            onChange={(e) => handleRoleChange(usr.id, e.target.value)}
+                            disabled={usr.id === user.id} // Disable editing self
+                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-350 focus:outline-none focus:border-indigo-500 text-[10px] font-bold cursor-pointer"
+                          >
+                            <option value="user">User</option>
+                            <option value="moderator">Moderator</option>
+                            <option value="admin">Admin</option>
+                          </select>
+
+                          {/* Delete Button */}
+                          <button
+                            onClick={() => handleDeleteUser(usr.id, usr.name)}
+                            disabled={usr.id === user.id} // Disable deleting self
+                            className={`p-1.5 border rounded transition-colors ${
+                              usr.id === user.id 
+                                ? 'border-slate-800 text-slate-700 cursor-not-allowed' 
+                                : 'border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-pointer'
+                            }`}
+                            title={usr.id === user.id ? "Cannot delete yourself" : "Delete Supporter Account"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     ))}
