@@ -225,10 +225,8 @@ INSERT INTO community_members (id, community_id, user_id, role, status) VALUES
 
 
 -- Seed Comments
-INSERT INTO comments (id, post_id, author_id, text) VALUES
-('comm1', 'p1', 'm1', 'Excellent video representation, Tashi! Stand united!'),
-('comm2', 'p1', 'm4', 'Awesome work. Shared in our college group!'),
-('comm3', 'p3', 'm2', 'Very details report sir. We will distribute printouts in our community.');
+-- No dummy comments seeded to keep feed clean.
+
 
 -- Seed Stories (expires in future)
 -- No dummy stories seeded to keep feed clean.
