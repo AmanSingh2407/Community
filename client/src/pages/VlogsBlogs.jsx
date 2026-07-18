@@ -392,8 +392,16 @@ const VlogsBlogs = ({ onNavigate }) => {
               {/* Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-indigo-900/30 border border-slate-700/60 rounded-full flex items-center justify-center font-bold text-xs text-indigo-300 uppercase">
-                    {post.author_name ? post.author_name.charAt(0) : 'U'}
+                  <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center bg-indigo-900/30 border border-slate-700/60 font-bold text-xs text-indigo-300 uppercase">
+                    {post.author_avatar ? (
+                      <img 
+                        src={post.author_avatar.startsWith('http') ? post.author_avatar : `${API_URL}${post.author_avatar}`} 
+                        alt={post.author_name} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      post.author_name ? post.author_name.charAt(0) : 'U'
+                    )}
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-white">{post.author_name || 'Anonymous Supporter'}</h4>

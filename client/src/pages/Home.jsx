@@ -1317,8 +1317,16 @@ const Home = ({ onNavigate }) => {
               <div key={post.id} className="bg-slate-900 border border-slate-800/85 rounded-2xl p-4 md:p-5 space-y-4 shadow-md">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-slate-800 border border-slate-700/60 rounded-full flex items-center justify-center font-bold text-xs text-indigo-400">
-                      {post.author_name ? post.author_name.charAt(0) : 'U'}
+                    <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-800 border border-slate-700/60 font-bold text-xs text-indigo-400">
+                      {post.author_avatar ? (
+                        <img 
+                          src={post.author_avatar.startsWith('http') ? post.author_avatar : `${API_URL}${post.author_avatar}`} 
+                          alt={post.author_name} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        post.author_name ? post.author_name.charAt(0) : 'U'
+                      )}
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white">{post.author_name || 'Supporter'}</h4>
