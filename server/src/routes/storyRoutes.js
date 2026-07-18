@@ -27,7 +27,7 @@ const mediaUpload = upload.fields([
 ]);
 
 // Routes
-router.get('/feed', verifyToken, getStoriesFeed);
+router.get('/feed', getStoriesFeed);
 router.post('/', verifyToken, mediaUpload, createStory);
 
 module.exports = router;
