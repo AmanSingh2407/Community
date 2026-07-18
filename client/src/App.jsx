@@ -94,7 +94,11 @@ function NotificationBell({ onNavigate }) {
                     key={notif.id}
                     onClick={() => {
                       setShowDropdown(false);
-                      onNavigate('vlogs');
+                      if (notif.type === 'join_request' || notif.type === 'request_approved') {
+                        onNavigate('communities');
+                      } else {
+                        onNavigate('vlogs');
+                      }
                     }}
                     className={`flex items-start gap-3 p-2.5 rounded-xl border transition-colors cursor-pointer text-left ${
                       notif.is_read 
@@ -113,7 +117,13 @@ function NotificationBell({ onNavigate }) {
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] text-slate-200 leading-normal">
                         <span className="font-bold text-white mr-1">{notif.actor_name}</span>
-                        {notif.type === 'new_vlog' ? 'uploaded a new vlog post!' : 'published a new blog post!'}
+                        {notif.type === 'join_request' 
+                          ? 'requested to join your community!' 
+                          : notif.type === 'request_approved'
+                            ? 'approved your request to join their community!'
+                            : notif.type === 'new_vlog'
+                              ? 'uploaded a new vlog post!'
+                              : 'published a new blog post!'}
                       </p>
                       <span className="block text-[9px] text-slate-500 mt-1">
                         {new Date(notif.created_at).toLocaleDateString()} at {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

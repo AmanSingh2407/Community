@@ -141,8 +141,8 @@ const joinCommunity = async (req, res, next) => {
       return res.status(400).json({ success: false, error: `Already requested or joined (Status: ${existing[0].status})` });
     }
 
-    // Fetch community existence
-    const [comms] = await db.query('SELECT name FROM communities WHERE id = ?', [communityId]);
+    // Fetch community existence and admin creator ID
+    const [comms] = await db.query('SELECT name, created_by FROM communities WHERE id = ?', [communityId]);
     if (comms.length === 0) {
       return res.status(404).json({ success: false, error: 'Community not found' });
     }
@@ -152,6 +152,19 @@ const joinCommunity = async (req, res, next) => {
       'INSERT INTO community_members (id, community_id, user_id, role, status) VALUES (?, ?, ?, ?, ?)',
       [memberId, communityId, userId, 'member', 'pending']
     );
+
+    // Send notification to the community admin creator
+    if (comms[0].created_by) {
+      try {
+        const notifId = crypto.randomUUID();
+        await db.query(
+          'INSERT INTO notifications (id, user_id, type, actor_id, target_id, target_type) VALUES (?, ?, ?, ?, ?, ?)',
+          [notifId, comms[0].created_by, 'join_request', userId, communityId, 'community']
+        );
+      } catch (notifErr) {
+        console.error('Failed to create join request notification:', notifErr);
+      }
+    }
 
     res.json({
       success: true,
@@ -260,6 +273,17 @@ const approveJoinRequest = async (req, res, next) => {
     else if (currentPoints >= 2500) rankTier = 'Gold';
     else if (currentPoints >= 1000) rankTier = 'Silver';
     await db.query('UPDATE users SET rank_tier = ? WHERE id = ?', [rankTier, targetUserId]);
+
+    // Send notification to the approved user
+    try {
+      const notifId = crypto.randomUUID();
+      await db.query(
+        'INSERT INTO notifications (id, user_id, type, actor_id, target_id, target_type) VALUES (?, ?, ?, ?, ?, ?)',
+        [notifId, targetUserId, 'request_approved', userId, communityId, 'community']
+      );
+    } catch (notifErr) {
+      console.error('Failed to create request approval notification:', notifErr);
+    }
 
     res.json({ success: true, message: 'Request approved successfully' });
   } catch (error) {

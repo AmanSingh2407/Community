@@ -204,21 +204,8 @@ INSERT INTO user_badges (id, user_id, badge_id) VALUES
 ('ub4', 'm3', 'b1'),
 ('ub5', 'm4', 'b1');
 
--- Seed Communities
-INSERT INTO communities (id, name, type, description, city, cover_image, created_by, qr_token, member_count) VALUES
-('c1', 'Ladakh Youth Chapter', 'public', 'Youth-led group organizing environmental cleanups, tree plantations, and policy support campaigns in Leh and surrounding areas.', 'Leh', 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=500&q=80', 'm1', 'qr_token_lehyouth', 4),
-('c2', 'Delhi Supporters Hub', 'public', 'Supporting Sonam Wangchuk\'s educational reforms and protesting climate delays. Arranging university campaigns across New Delhi.', 'Delhi', 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=500&q=80', 'm4', 'qr_token_delhi', 2),
-('c3', 'Mumbai Action Core', 'private', 'Organizing coastal awareness walks and fundraising drives for sustainable mountain schools.', 'Mumbai', 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=500&q=80', 'm2', 'qr_token_mumbai', 1);
-
--- Seed Community Members
-INSERT INTO community_members (id, community_id, user_id, role, status) VALUES
-('cm1', 'c1', 'm1', 'admin', 'joined'),
-('cm2', 'c1', 'm2', 'member', 'joined'),
-('cm3', 'c1', 'm3', 'member', 'joined'),
-('cm4', 'c1', 'm5', 'member', 'joined'),
-('cm5', 'c2', 'm4', 'admin', 'joined'),
-('cm6', 'c2', 'm1', 'member', 'joined'),
-('cm7', 'c3', 'm2', 'admin', 'joined');
+-- Seed Communities & Members
+-- Purged dummy communities and memberships to keep system clean.
 
 -- Seed Posts
 -- No dummy posts seeded to keep feed clean.
