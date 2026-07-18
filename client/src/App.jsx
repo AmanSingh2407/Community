@@ -7,7 +7,7 @@ import Communities from './pages/Communities';
 import Rewards from './pages/Rewards';
 import AdminPanel from './pages/AdminPanel';
 import Profile from './pages/Profile';
-import { Home as HomeIcon, Video, Plus, Users, Award, ShieldAlert, LogOut, Loader, User, Bell, CheckCheck } from 'lucide-react';
+import { Home as HomeIcon, Video, Plus, Users, Award, ShieldAlert, LogOut, Loader, User, Bell, CheckCheck, X } from 'lucide-react';
 
 function NotificationBell({ onNavigate }) {
   const { user } = useAuth();
