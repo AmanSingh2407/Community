@@ -1,7 +1,15 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const { createStory, getStoriesFeed, endLiveStory } = require('../controllers/storyController');
+const { 
+  createStory, 
+  getStoriesFeed, 
+  endLiveStory,
+  uploadLiveFrame,
+  getLiveFrame,
+  postLiveComment,
+  getLiveComments
+} = require('../controllers/storyController');
 const { verifyToken } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -30,5 +38,11 @@ const mediaUpload = upload.fields([
 router.get('/feed', getStoriesFeed);
 router.post('/', verifyToken, mediaUpload, createStory);
 router.delete('/live', verifyToken, endLiveStory);
+
+// Live Stream Frame and Comments Routes
+router.post('/live/frame', verifyToken, uploadLiveFrame);
+router.get('/live/:authorId/frame', getLiveFrame);
+router.post('/live/:authorId/comments', verifyToken, postLiveComment);
+router.get('/live/:authorId/comments', getLiveComments);
 
 module.exports = router;

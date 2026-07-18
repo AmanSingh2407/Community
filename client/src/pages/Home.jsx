@@ -146,6 +146,9 @@ const Home = ({ onNavigate }) => {
   const [liveDuration, setLiveDuration] = useState(0);
   const [myLiveComment, setMyLiveComment] = useState('');
   const [liveSummary, setLiveSummary] = useState(null);
+  const [currentLiveFrame, setCurrentLiveFrame] = useState(null);
+  const [currentLiveComments, setCurrentLiveComments] = useState([]);
+  const [viewerLiveComment, setViewerLiveComment] = useState('');
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -154,6 +157,7 @@ const Home = ({ onNavigate }) => {
   const liveTimerRef = useRef(null);
   const liveCommentsTimerRef = useRef(null);
   const liveViewersTimerRef = useRef(null);
+  const liveFrameTimerRef = useRef(null);
 
   // Fetch stories directly from database
   const fetchStories = async () => {
@@ -232,6 +236,12 @@ const Home = ({ onNavigate }) => {
   useEffect(() => {
     if (!activeStoryFeed) return;
     
+    const currentStory = activeStoryFeed.stories[activeStoryIndex];
+    if (currentStory && currentStory.media_type === 'live') {
+      // Do not auto-advance live stream stories
+      return;
+    }
+
     const maxStories = activeStoryFeed.stories.length;
     const timer = setTimeout(() => {
       if (activeStoryIndex < maxStories - 1) {
@@ -243,6 +253,60 @@ const Home = ({ onNavigate }) => {
     }, 5000);
 
     return () => clearTimeout(timer);
+  }, [activeStoryFeed, activeStoryIndex]);
+
+  // Live Stream Viewer Polling Loop
+  useEffect(() => {
+    if (!activeStoryFeed) {
+      setCurrentLiveFrame(null);
+      setCurrentLiveComments([]);
+      return;
+    }
+
+    const currentStory = activeStoryFeed.stories[activeStoryIndex];
+    if (!currentStory || currentStory.media_type !== 'live') {
+      setCurrentLiveFrame(null);
+      setCurrentLiveComments([]);
+      return;
+    }
+
+    const authorId = activeStoryFeed.author_id;
+
+    // 1. Frame Polling (webcam image updating)
+    const frameTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/stories/live/${authorId}/frame`);
+        const data = await res.json();
+        if (data.success) {
+          setCurrentLiveFrame(data.frame);
+          setLiveViewerCount(data.viewer_count);
+        } else {
+          // Stream ended/not found
+          setActiveStoryFeed(null);
+          setActiveStoryIndex(0);
+        }
+      } catch (err) {
+        console.error('Error fetching live stream frame:', err);
+      }
+    }, 1000);
+
+    // 2. Chat Comments Polling
+    const commentsTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/stories/live/${authorId}/comments`);
+        const data = await res.json();
+        if (data.success) {
+          setCurrentLiveComments(data.comments || []);
+        }
+      } catch (err) {
+        console.error('Error fetching live comments:', err);
+      }
+    }, 1500);
+
+    return () => {
+      clearInterval(frameTimer);
+      clearInterval(commentsTimer);
+    };
   }, [activeStoryFeed, activeStoryIndex]);
 
   // Clean up Live broadcast resources on unmount
@@ -717,47 +781,52 @@ const Home = ({ onNavigate }) => {
       setLiveDuration(prev => prev + 1);
     }, 1000);
 
-    // Dynamic viewers fluctuation loop
-    liveViewersTimerRef.current = setInterval(() => {
-      setLiveViewerCount(prev => {
-        if (prev < 10) return prev + Math.floor(Math.random() * 3) + 1;
-        const change = Math.random() > 0.45 ? 1 : -1;
-        const delta = Math.floor(Math.random() * 4) * change;
-        return Math.max(prev + delta, 4);
-      });
-    }, 3000);
-
-    // simulated live comments stream loop
-    let commentIndex = 0;
-    liveCommentsTimerRef.current = setInterval(() => {
-      if (commentIndex < SIMULATED_COMMENTS.length) {
-        const nextComment = SIMULATED_COMMENTS[commentIndex];
-        setLiveComments(prev => [...prev, {
-          id: `sim-${Date.now()}-${commentIndex}`,
-          sender: nextComment.sender,
-          message: nextComment.message
-        }]);
-        commentIndex++;
-      } else {
-        const randomNames = ['Tashi Dorjay', 'Rigzin Angmo', 'Pema Tsering', 'Kartik Sharma', 'Sonam Wangchuk'];
-        const randomTexts = [
-          'Supporting you all from Leh! ✊',
-          'Let\'s make Ladakh green again! 🏔️',
-          'Awesome livestream, Aman!',
-          'Sent support hearts! 💖',
-          'Saffron flag in our hearts! 🇮🇳',
-          'Amazing session!',
-          'We stand with Sonam sir!'
-        ];
-        const randomName = randomNames[Math.floor(Math.random() * randomNames.length)];
-        const randomText = randomTexts[Math.floor(Math.random() * randomTexts.length)];
-        setLiveComments(prev => [...prev, {
-          id: `sim-rand-${Date.now()}`,
-          sender: randomName,
-          message: randomText
-        }]);
+    // Live webcam frame capture upload loop (real-time stream)
+    liveFrameTimerRef.current = setInterval(() => {
+      const liveVid = document.getElementById('liveVideoPreview');
+      if (liveVid && liveVid.readyState === 4) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 240;
+          canvas.height = 320;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(liveVid, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // compress to save bandwidth
+          
+          const token = getToken();
+          fetch(`${API_URL}/api/stories/live/frame`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ frame: dataUrl })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.viewer_count !== undefined) {
+              setLiveViewerCount(data.viewer_count);
+            }
+          })
+          .catch(e => console.error('Frame upload fail:', e));
+        } catch (err) {
+          console.error(err);
+        }
       }
-    }, 3500);
+    }, 1000);
+
+    // Live comments polling loop (no dummy comments!)
+    liveCommentsTimerRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/stories/live/${user.id}/comments`);
+        const data = await res.json();
+        if (data.success) {
+          setLiveComments(data.comments || []);
+        }
+      } catch (err) {
+        console.error('Error loading broadcaster chat:', err);
+      }
+    }, 1500);
   };
 
   const handleEndBroadcast = async () => {
@@ -765,6 +834,7 @@ const Home = ({ onNavigate }) => {
     clearInterval(liveTimerRef.current);
     clearInterval(liveCommentsTimerRef.current);
     clearInterval(liveViewersTimerRef.current);
+    clearInterval(liveFrameTimerRef.current);
     
     if (liveStream) {
       liveStream.getTracks().forEach(track => track.stop());
@@ -814,7 +884,7 @@ const Home = ({ onNavigate }) => {
     }
 
     setLiveSummary({
-      peakViewers: Math.max(liveViewerCount, 12),
+      peakViewers: Math.max(liveViewerCount, 1),
       duration: liveDuration,
       pointsEarned: pointsAwarded
     });
@@ -824,6 +894,7 @@ const Home = ({ onNavigate }) => {
     clearInterval(liveTimerRef.current);
     clearInterval(liveCommentsTimerRef.current);
     clearInterval(liveViewersTimerRef.current);
+    clearInterval(liveFrameTimerRef.current);
     if (liveStream) {
       liveStream.getTracks().forEach(track => track.stop());
     }
@@ -844,17 +915,30 @@ const Home = ({ onNavigate }) => {
     } catch (err) {}
   };
 
-  const handleSendMyComment = (e) => {
+  const handleSendMyComment = async (e) => {
     e.preventDefault();
     if (!myLiveComment.trim()) return;
     
-    setLiveComments(prev => [...prev, {
-      id: `my-${Date.now()}`,
-      sender: user.name,
-      message: myLiveComment,
-      isSelf: true
-    }]);
-    setMyLiveComment('');
+    try {
+      const token = getToken();
+      await fetch(`${API_URL}/api/stories/live/${user.id}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message: myLiveComment })
+      });
+      setMyLiveComment('');
+      
+      const res = await fetch(`${API_URL}/api/stories/live/${user.id}/comments`);
+      const data = await res.json();
+      if (data.success) {
+        setLiveComments(data.comments || []);
+      }
+    } catch (err) {
+      console.error('Error posting comment:', err);
+    }
   };
 
   const isPrimaryChapterJoined = joinedChapters.includes('c1');
@@ -1340,34 +1424,96 @@ const Home = ({ onNavigate }) => {
 
           <div className="flex-1 flex items-center justify-center p-2 relative">
             {activeStoryFeed.stories[activeStoryIndex].media_type === 'live' ? (
-              <div className="relative max-h-[70vh] aspect-[9/16] max-w-sm w-full bg-slate-950 rounded-2xl border border-slate-900 overflow-hidden flex flex-col justify-between shadow-2xl p-4">
-                {/* Live Stream simulated camera output */}
-                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60">
-                  <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 animate-pulse">
-                    <Video className="w-8 h-8 text-indigo-400" />
-                  </div>
-                  <span className="absolute text-[10px] text-slate-400 font-black uppercase tracking-widest mt-24">Connecting Stream...</span>
-                </div>
+              <div className="relative max-h-[75vh] aspect-[9/16] max-w-sm w-full bg-slate-950 rounded-2xl border border-slate-900 overflow-hidden flex flex-col justify-between shadow-2xl p-4">
                 
-                {/* Floating Live indicators */}
+                {/* 1. Live Frame (Webcam output) */}
+                {currentLiveFrame ? (
+                  <img 
+                    src={currentLiveFrame} 
+                    alt="Live Broadcast Feed" 
+                    className="absolute inset-0 w-full h-full object-cover z-10"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900 z-10">
+                    <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 animate-pulse">
+                      <Video className="w-8 h-8 text-indigo-400" />
+                    </div>
+                    <span className="absolute text-[10px] text-slate-400 font-black uppercase tracking-widest mt-24">Connecting Stream...</span>
+                  </div>
+                )}
+                
+                {/* 2. Floating Indicators */}
                 <div className="absolute top-4 left-4 flex items-center gap-2 z-30">
                   <span className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded uppercase tracking-wider animate-pulse">LIVE</span>
-                  <span className="bg-black/60 backdrop-blur-sm text-slate-300 font-bold text-[9px] px-2 py-0.5 rounded">👀 14 viewers</span>
+                  <span className="bg-black/60 backdrop-blur-sm text-slate-300 font-bold text-[9px] px-2 py-0.5 rounded">👀 {liveViewerCount} viewers</span>
                 </div>
 
-                {/* Live Simulated chat ticker */}
-                <div className="absolute bottom-4 left-4 right-4 max-h-[25vh] overflow-y-auto z-30 space-y-2 pointer-events-none select-none bg-gradient-to-t from-black/90 to-transparent p-3 rounded-xl flex flex-col justify-end">
-                  {[
-                    { sender: 'Rigzin Angmo', message: 'Campaign is live! 🏔️' },
-                    { sender: 'Tashi Dorjay', message: 'Support from Ladakh! ✊' },
-                    { sender: 'Aman Singh', message: 'Supporting the campaign live!' }
-                  ].map((comment, idx) => (
-                    <div key={idx} className="text-[10px] leading-relaxed">
-                      <span className="font-black text-indigo-400 mr-1.5">{comment.sender}:</span>
-                      <span className="text-slate-100">{comment.message}</span>
-                    </div>
-                  ))}
+                {/* 3. Live Chat comments list */}
+                <div className="absolute bottom-16 left-4 right-4 max-h-[22vh] overflow-y-auto z-30 space-y-2 bg-gradient-to-t from-black/95 via-black/75 to-transparent p-3 rounded-xl flex flex-col justify-end custom-scrollbar">
+                  {currentLiveComments.length > 0 ? (
+                    currentLiveComments.map((comment) => (
+                      <div key={comment.id} className="text-[10px] leading-relaxed">
+                        <span className="font-black text-indigo-400 mr-1.5">{comment.sender}:</span>
+                        <span className="text-slate-100">{comment.message}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-[9px] text-slate-500 italic">No chat messages yet...</div>
+                  )}
                 </div>
+
+                {/* 4. Live Chat comment Input Field for viewers */}
+                <div className="absolute bottom-3 left-3 right-3 z-30">
+                  {user ? (
+                    <form 
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!viewerLiveComment.trim()) return;
+                        try {
+                          const token = getToken();
+                          await fetch(`${API_URL}/api/stories/live/${activeStoryFeed.author_id}/comments`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({ message: viewerLiveComment })
+                          });
+                          setViewerLiveComment('');
+                          
+                          // Refresh comments immediately
+                          const res = await fetch(`${API_URL}/api/stories/live/${activeStoryFeed.author_id}/comments`);
+                          const data = await res.json();
+                          if (data.success) {
+                            setCurrentLiveComments(data.comments || []);
+                          }
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        type="text"
+                        placeholder="Say something live..."
+                        value={viewerLiveComment}
+                        onChange={(e) => setViewerLiveComment(e.target.value)}
+                        className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] px-3 py-1.5 rounded-lg active:scale-95 transition-all"
+                      >
+                        Send
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="text-center py-2 bg-slate-950/90 rounded-lg border border-slate-800 text-[10px] text-slate-400">
+                      Please <button onClick={() => { setActiveStoryFeed(null); onNavigate('auth'); }} className="text-indigo-400 font-bold underline hover:text-indigo-300">login</button> to join the live chat.
+                    </div>
+                  )}
+                </div>
+
               </div>
             ) : activeStoryFeed.stories[activeStoryIndex].media_type === 'video' || /\.(mp4|webm|mov)$/i.test(activeStoryFeed.stories[activeStoryIndex].media_url) ? (
               <div className="relative max-h-[70vh] rounded-2xl border border-slate-900 overflow-hidden flex items-center justify-center shadow-2xl">

@@ -99,11 +99,111 @@ const createStory = async (req, res, next) => {
 const endLiveStory = async (req, res, next) => {
   try {
     const authorId = req.user.id;
+    
+    // Delete live stream status
     await db.query(
       "DELETE FROM stories WHERE author_id = ? AND media_type = 'live'",
       [authorId]
     );
+    
+    // Also clean up frame record
+    await db.query(
+      "DELETE FROM live_streams WHERE author_id = ?",
+      [authorId]
+    );
+
     res.json({ success: true, message: 'Live stream ended successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Live streaming video frames upload
+const uploadLiveFrame = async (req, res, next) => {
+  try {
+    const authorId = req.user.id;
+    const { frame } = req.body;
+    
+    await db.query(
+      `INSERT INTO live_streams (author_id, current_frame, updated_at) 
+       VALUES (?, ?, NOW()) 
+       ON DUPLICATE KEY UPDATE current_frame = ?, updated_at = NOW()`,
+      [authorId, frame, frame]
+    );
+
+    const [stream] = await db.query('SELECT viewer_count FROM live_streams WHERE author_id = ?', [authorId]);
+    
+    res.json({ 
+      success: true, 
+      viewer_count: stream[0] ? stream[0].viewer_count : 1 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// View live stream frames
+const getLiveFrame = async (req, res, next) => {
+  try {
+    const { authorId } = req.params;
+    const [stream] = await db.query('SELECT current_frame, viewer_count FROM live_streams WHERE author_id = ?', [authorId]);
+    
+    if (!stream[0]) {
+      return res.status(404).json({ success: false, error: 'Live stream not found' });
+    }
+
+    res.json({
+      success: true,
+      frame: stream[0].current_frame,
+      viewer_count: stream[0].viewer_count
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Post comment on live stream
+const postLiveComment = async (req, res, next) => {
+  try {
+    const { authorId } = req.params;
+    const { message } = req.body;
+    const senderName = req.user.name;
+    const commentId = crypto.randomUUID();
+
+    await db.query(
+      'INSERT INTO live_stream_comments (id, stream_author_id, sender_name, message) VALUES (?, ?, ?, ?)',
+      [commentId, authorId, senderName, message]
+    );
+
+    res.status(201).json({
+      success: true,
+      comment: {
+        id: commentId,
+        sender_name: senderName,
+        message
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get comments for live stream
+const getLiveComments = async (req, res, next) => {
+  try {
+    const { authorId } = req.params;
+    const [comments] = await db.query(
+      `SELECT id, sender_name as sender, message, created_at 
+       FROM live_stream_comments 
+       WHERE stream_author_id = ? 
+       ORDER BY created_at ASC`,
+      [authorId]
+    );
+
+    res.json({
+      success: true,
+      comments
+    });
   } catch (error) {
     next(error);
   }
