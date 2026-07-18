@@ -170,7 +170,7 @@ function Dashboard() {
   const navItems = [
     { id: 'home', label: 'Home Feed', icon: HomeIcon },
     { id: 'vlogs', label: 'Vlogs & Blogs', icon: Video },
-    { id: 'communities', label: 'Local Chapters', icon: Users },
+    { id: 'communities', label: 'Local Community', icon: Users },
     { id: 'rewards', label: 'My Rewards', icon: Award }
   ];
 
@@ -351,7 +351,7 @@ function Dashboard() {
         <div className="hidden md:flex justify-between items-center mb-6">
           <div>
             <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">
-              {activeTab === 'home' ? 'Home Feed' : activeTab === 'vlogs' ? 'Vlogs & Blogs' : activeTab === 'communities' ? 'Local Chapters' : activeTab === 'rewards' ? 'My Rewards' : activeTab === 'admin' ? 'Operations Center' : activeTab === 'profile' ? 'My Profile' : 'Sign In'}
+              {activeTab === 'home' ? 'Home Feed' : activeTab === 'vlogs' ? 'Vlogs & Blogs' : activeTab === 'communities' ? 'Local Community' : activeTab === 'rewards' ? 'My Rewards' : activeTab === 'admin' ? 'Operations Center' : activeTab === 'profile' ? 'My Profile' : 'Sign In'}
             </h2>
           </div>
           

@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
 // Create community chapter
 const createCommunity = async (req, res, next) => {
@@ -71,20 +72,47 @@ const createCommunity = async (req, res, next) => {
   }
 };
 
-// Fetch community listings (filtered by city option)
+// Fetch community listings (filtered by city option) with dynamic user membership status join
 const getCommunities = async (req, res, next) => {
   try {
     const { city } = req.query;
     
-    let query = 'SELECT * FROM communities';
+    // Optional JWT verification
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secretkey');
+        userId = decoded.id;
+      } catch (err) {
+        // Ignore token decode errors for guest view
+      }
+    }
+
+    let query = '';
     const params = [];
 
+    if (userId) {
+      query = `
+        SELECT c.*, cm.status as my_membership_status, cm.role as my_membership_role
+        FROM communities c
+        LEFT JOIN community_members cm ON c.id = cm.community_id AND cm.user_id = ?
+      `;
+      params.push(userId);
+    } else {
+      query = `
+        SELECT c.*, NULL as my_membership_status, NULL as my_membership_role
+        FROM communities c
+      `;
+    }
+
     if (city) {
-      query += ' WHERE city = ?';
+      query += userId ? ' WHERE c.city = ?' : ' WHERE city = ?';
       params.push(city);
     }
 
-    query += ' ORDER BY member_count DESC';
+    query += userId ? ' ORDER BY c.member_count DESC' : ' ORDER BY member_count DESC';
 
     const [communities] = await db.query(query, params);
 
@@ -110,56 +138,25 @@ const joinCommunity = async (req, res, next) => {
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({ success: false, error: `Already a member (Status: ${existing[0].status})` });
+      return res.status(400).json({ success: false, error: `Already requested or joined (Status: ${existing[0].status})` });
     }
 
-    // Fetch community to check type
-    const [comms] = await db.query('SELECT type FROM communities WHERE id = ?', [communityId]);
+    // Fetch community existence
+    const [comms] = await db.query('SELECT name FROM communities WHERE id = ?', [communityId]);
     if (comms.length === 0) {
       return res.status(404).json({ success: false, error: 'Community not found' });
     }
 
-    const isPublic = comms[0].type === 'public';
-    const status = isPublic ? 'joined' : 'pending';
-
     const memberId = crypto.randomUUID();
     await db.query(
       'INSERT INTO community_members (id, community_id, user_id, role, status) VALUES (?, ?, ?, ?, ?)',
-      [memberId, communityId, userId, 'member', status]
+      [memberId, communityId, userId, 'member', 'pending']
     );
-
-    if (isPublic) {
-      await db.query('UPDATE communities SET member_count = member_count + 1 WHERE id = ?', [communityId]);
-      
-      // Award points (+30 points for joining a chapter)
-      const pointsAwarded = 30;
-      const transactionId = crypto.randomUUID();
-      await db.query(
-        'INSERT INTO points_transactions (id, user_id, action_type, points) VALUES (?, ?, ?, ?)',
-        [transactionId, userId, 'join_community', pointsAwarded]
-      );
-      await db.query('UPDATE users SET points = points + ? WHERE id = ?', [pointsAwarded, userId]);
-    }
-
-    // Check rank updates
-    const [userData] = await db.query('SELECT points, rank_tier FROM users WHERE id = ?', [userId]);
-    const currentPoints = userData[0].points;
-    let rankTier = userData[0].rank_tier;
-
-    if (currentPoints >= 5000) rankTier = 'Platinum';
-    else if (currentPoints >= 2500) rankTier = 'Gold';
-    else if (currentPoints >= 1000) rankTier = 'Silver';
-
-    if (rankTier !== userData[0].rank_tier) {
-      await db.query('UPDATE users SET rank_tier = ? WHERE id = ?', [rankTier, userId]);
-    }
 
     res.json({
       success: true,
-      status,
-      message: isPublic ? 'Joined community successfully' : 'Join request sent, pending approval',
-      new_points: currentPoints,
-      new_rank: rankTier
+      status: 'pending',
+      message: 'Join request sent successfully, pending approval from community admin.'
     });
   } catch (error) {
     next(error);
@@ -189,9 +186,206 @@ const getCommunityMembers = async (req, res, next) => {
   }
 };
 
+// Fetch pending join requests for community creator
+const getJoinRequests = async (req, res, next) => {
+  try {
+    const communityId = req.params.id;
+    const userId = req.user.id;
+
+    // Check if requester is creator
+    const [comm] = await db.query('SELECT created_by FROM communities WHERE id = ?', [communityId]);
+    if (!comm[0]) {
+      return res.status(404).json({ success: false, error: 'Community not found' });
+    }
+    if (comm[0].created_by !== userId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized to view requests' });
+    }
+
+    const [requests] = await db.query(
+      `SELECT cm.user_id, cm.joined_at, u.name, u.email, u.avatar_url
+       FROM community_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.community_id = ? AND cm.status = 'pending'
+       ORDER BY cm.joined_at ASC`,
+      [communityId]
+    );
+
+    res.json({ success: true, requests });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Approve join request
+const approveJoinRequest = async (req, res, next) => {
+  try {
+    const communityId = req.params.id;
+    const targetUserId = req.params.userId;
+    const userId = req.user.id;
+
+    const [comm] = await db.query('SELECT created_by FROM communities WHERE id = ?', [communityId]);
+    if (!comm[0]) {
+      return res.status(404).json({ success: false, error: 'Community not found' });
+    }
+    if (comm[0].created_by !== userId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized to manage requests' });
+    }
+
+    const [result] = await db.query(
+      "UPDATE community_members SET status = 'joined' WHERE community_id = ? AND user_id = ? AND status = 'pending'",
+      [communityId, targetUserId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(400).json({ success: false, error: 'No pending request found' });
+    }
+
+    // Increment member_count
+    await db.query('UPDATE communities SET member_count = member_count + 1 WHERE id = ?', [communityId]);
+
+    // Award +30 points to the approved user
+    const pointsAwarded = 30;
+    const transactionId = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO points_transactions (id, user_id, action_type, points) VALUES (?, ?, ?, ?)',
+      [transactionId, targetUserId, 'join_community', pointsAwarded]
+    );
+    await db.query('UPDATE users SET points = points + ? WHERE id = ?', [pointsAwarded, targetUserId]);
+
+    // Update rank
+    const [userData] = await db.query('SELECT points FROM users WHERE id = ?', [targetUserId]);
+    const currentPoints = userData[0].points;
+    let rankTier = 'Bronze';
+    if (currentPoints >= 5000) rankTier = 'Platinum';
+    else if (currentPoints >= 2500) rankTier = 'Gold';
+    else if (currentPoints >= 1000) rankTier = 'Silver';
+    await db.query('UPDATE users SET rank_tier = ? WHERE id = ?', [rankTier, targetUserId]);
+
+    res.json({ success: true, message: 'Request approved successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Decline join request
+const declineJoinRequest = async (req, res, next) => {
+  try {
+    const communityId = req.params.id;
+    const targetUserId = req.params.userId;
+    const userId = req.user.id;
+
+    const [comm] = await db.query('SELECT created_by FROM communities WHERE id = ?', [communityId]);
+    if (!comm[0]) {
+      return res.status(404).json({ success: false, error: 'Community not found' });
+    }
+    if (comm[0].created_by !== userId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized to manage requests' });
+    }
+
+    const [result] = await db.query(
+      "DELETE FROM community_members WHERE community_id = ? AND user_id = ? AND status = 'pending'",
+      [communityId, targetUserId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(400).json({ success: false, error: 'No pending request found' });
+    }
+
+    res.json({ success: true, message: 'Request declined successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get community chat messages
+const getCommunityMessages = async (req, res, next) => {
+  try {
+    const communityId = req.params.id;
+    const userId = req.user.id;
+
+    // Verify membership
+    const [member] = await db.query(
+      "SELECT id FROM community_members WHERE community_id = ? AND user_id = ? AND status = 'joined'",
+      [communityId, userId]
+    );
+    if (member.length === 0) {
+      return res.status(403).json({ success: false, error: 'Access denied: You must be an approved member to view chat.' });
+    }
+
+    // Clean up expired messages (> 24 hours) first
+    await db.query('DELETE FROM community_messages WHERE created_at < NOW() - INTERVAL 1 DAY');
+
+    const [messages] = await db.query(
+      `SELECT cm.*, u.name as sender_name, u.avatar_url as sender_avatar
+       FROM community_messages cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.community_id = ?
+       ORDER BY cm.created_at ASC`,
+      [communityId]
+    );
+
+    res.json({ success: true, messages });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Post a message/file to community chat
+const sendCommunityMessage = async (req, res, next) => {
+  try {
+    const communityId = req.params.id;
+    const userId = req.user.id;
+    const { message } = req.body;
+
+    const [member] = await db.query(
+      "SELECT id FROM community_members WHERE community_id = ? AND user_id = ? AND status = 'joined'",
+      [communityId, userId]
+    );
+    if (member.length === 0) {
+      return res.status(403).json({ success: false, error: 'Access denied: Only approved members can send messages.' });
+    }
+
+    let mediaUrl = null;
+    let mediaType = 'text';
+
+    if (req.files && req.files.chatMedia && req.files.chatMedia[0]) {
+      const file = req.files.chatMedia[0];
+      mediaUrl = `/uploads/${file.filename}`;
+      mediaType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+    }
+
+    if (!message && !mediaUrl) {
+      return res.status(400).json({ success: false, error: 'Message content or media is required' });
+    }
+
+    const messageId = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO community_messages (id, community_id, user_id, message, media_url, media_type) VALUES (?, ?, ?, ?, ?, ?)',
+      [messageId, communityId, userId, message || null, mediaUrl, mediaType]
+    );
+
+    const [inserted] = await db.query(
+      `SELECT cm.*, u.name as sender_name, u.avatar_url as sender_avatar
+       FROM community_messages cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.id = ?`,
+      [messageId]
+    );
+
+    res.status(201).json({ success: true, message: inserted[0] });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createCommunity,
   getCommunities,
   joinCommunity,
-  getCommunityMembers
+  getCommunityMembers,
+  getJoinRequests,
+  approveJoinRequest,
+  declineJoinRequest,
+  getCommunityMessages,
+  sendCommunityMessage
 };

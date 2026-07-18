@@ -53,6 +53,19 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Periodic cleanup worker (runs every 1 hour to prune community chat messages older than 24 hours)
+setInterval(async () => {
+  try {
+    const db = require('./config/database');
+    const [result] = await db.query('DELETE FROM community_messages WHERE created_at < NOW() - INTERVAL 1 DAY');
+    if (result.affectedRows > 0) {
+      console.log(`[Pruning Worker] Successfully deleted ${result.affectedRows} expired community chat messages.`);
+    }
+  } catch (err) {
+    console.error('[Pruning Worker Error] Failed to delete expired community chat messages:', err);
+  }
+}, 3600000);
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`Awaaz backend server running on port ${PORT}`);
