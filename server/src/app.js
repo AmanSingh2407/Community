@@ -25,6 +25,7 @@ const storyRoutes = require('./routes/storyRoutes');
 const communityRoutes = require('./routes/communityRoutes');
 const rewardRoutes = require('./routes/rewardRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 app.use('/api/auth', authRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/posts', postRoutes);
@@ -32,6 +33,7 @@ app.use('/api/stories', storyRoutes);
 app.use('/api/communities', communityRoutes);
 app.use('/api/gamification', rewardRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Simple status route
 app.get('/api/health', (req, res) => {

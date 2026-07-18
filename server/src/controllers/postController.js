@@ -33,6 +33,28 @@ const createPost = async (req, res, next) => {
       [postId, authorId, type, title, body || null, mediaUrl, coverImage, hashtags || null]
     );
 
+    // Create notifications for all other users in the platform
+    try {
+      const [allUsers] = await db.query('SELECT id FROM users WHERE id != ?', [authorId]);
+      if (allUsers.length > 0) {
+        const notificationQueries = allUsers.map(u => [
+          crypto.randomUUID(),
+          u.id,
+          type === 'vlog' ? 'new_vlog' : 'new_blog',
+          authorId,
+          postId,
+          'post'
+        ]);
+
+        await db.query(
+          'INSERT INTO notifications (id, user_id, type, actor_id, target_id, target_type) VALUES ?',
+          [notificationQueries]
+        );
+      }
+    } catch (notifErr) {
+      console.error('Failed to create notifications for post:', notifErr);
+    }
+
     // Award Points: +5 points for creating a post (using the utility)
     const result = await updateUserPointsAndRank(authorId, 5, 'create_post');
 

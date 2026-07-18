@@ -7,7 +7,132 @@ import Communities from './pages/Communities';
 import Rewards from './pages/Rewards';
 import AdminPanel from './pages/AdminPanel';
 import Profile from './pages/Profile';
-import { Home as HomeIcon, Video, Plus, Users, Award, ShieldAlert, LogOut, Loader, User } from 'lucide-react';
+import { Home as HomeIcon, Video, Plus, Users, Award, ShieldAlert, LogOut, Loader, User, Bell, CheckCheck } from 'lucide-react';
+
+function NotificationBell({ onNavigate }) {
+  const { user } = useAuth();
+  const [notifications, setNotifications] = React.useState([]);
+  const [showDropdown, setShowDropdown] = React.useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+
+  const fetchNotifications = async () => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/notifications`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.notifications.filter(n => !n.is_read).length);
+      }
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/api/notifications/mark-read`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setUnreadCount(0);
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowDropdown(!showDropdown)}
+        className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer relative active:scale-95"
+        title="Notifications"
+      >
+        <Bell className="w-4.5 h-4.5" />
+        {unreadCount > 0 && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-slate-950 animate-pulse"></span>
+        )}
+      </button>
+
+      {showDropdown && (
+        <>
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setShowDropdown(false)}
+          />
+          <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 z-50 space-y-3 animate-fade-in max-h-[400px] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Notifications</h4>
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Mark all read
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-y-auto space-y-2.5 flex-1 custom-scrollbar pr-1">
+              {notifications.length > 0 ? (
+                notifications.map((notif) => (
+                  <div
+                    key={notif.id}
+                    onClick={() => {
+                      setShowDropdown(false);
+                      onNavigate('vlogs');
+                    }}
+                    className={`flex items-start gap-3 p-2.5 rounded-xl border transition-colors cursor-pointer text-left ${
+                      notif.is_read 
+                        ? 'bg-slate-950/20 border-transparent hover:bg-slate-850/30' 
+                        : 'bg-indigo-600/5 border-indigo-500/10 hover:bg-indigo-600/10'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase bg-slate-800 border border-slate-700/60 flex-shrink-0 overflow-hidden">
+                      {notif.actor_avatar ? (
+                        <img src={`${API_URL}${notif.actor_avatar}`} alt={notif.actor_name} className="w-full h-full object-cover" />
+                      ) : (
+                        notif.actor_name ? notif.actor_name.charAt(0) : 'U'
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-slate-200 leading-normal">
+                        <span className="font-bold text-white mr-1">{notif.actor_name}</span>
+                        {notif.type === 'new_vlog' ? 'uploaded a new vlog post!' : 'published a new blog post!'}
+                      </p>
+                      <span className="block text-[9px] text-slate-500 mt-1">
+                        {new Date(notif.created_at).toLocaleDateString()} at {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-xs text-slate-500 italic">
+                  No notifications yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function Dashboard() {
   const { user, logout } = useAuth();
@@ -183,6 +308,7 @@ function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          {user && <NotificationBell onNavigate={setActiveTab} />}
           {!user ? (
             <button
               onClick={() => setActiveTab('auth')}
@@ -230,6 +356,7 @@ function Dashboard() {
           </div>
           
           <div className="flex items-center gap-3">
+            {user && <NotificationBell onNavigate={setActiveTab} />}
             {!user ? (
               <button
                 onClick={() => setActiveTab('auth')}
