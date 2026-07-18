@@ -691,11 +691,27 @@ const Home = ({ onNavigate }) => {
     }
   };
 
-  const handleStartBroadcast = () => {
+  const handleStartBroadcast = async () => {
     setIsBroadcasting(true);
     setLiveViewerCount(1);
     setLiveComments([{ id: 'sys1', sender: 'System', message: 'You are now LIVE!', isSystem: true }]);
     
+    // Register live stream story in backend
+    try {
+      const token = getToken();
+      await fetch(`${API_URL}/api/stories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ media_type: 'live' })
+      });
+      fetchStories();
+    } catch (err) {
+      console.error('Failed to start live stream on backend:', err);
+    }
+
     // Start Broadcast Clock
     liveTimerRef.current = setInterval(() => {
       setLiveDuration(prev => prev + 1);
@@ -756,6 +772,20 @@ const Home = ({ onNavigate }) => {
     setLiveStream(null);
     setIsBroadcasting(false);
 
+    // End live stream story in backend
+    try {
+      const token = getToken();
+      await fetch(`${API_URL}/api/stories/live`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      fetchStories();
+    } catch (err) {
+      console.error('Failed to end live stream on backend:', err);
+    }
+
     // Award +50 points for broadcasting
     const pointsAwarded = 50;
     try {
@@ -790,7 +820,7 @@ const Home = ({ onNavigate }) => {
     });
   };
 
-  const handleCloseLiveModal = () => {
+  const handleCloseLiveModal = async () => {
     clearInterval(liveTimerRef.current);
     clearInterval(liveCommentsTimerRef.current);
     clearInterval(liveViewersTimerRef.current);
@@ -800,6 +830,18 @@ const Home = ({ onNavigate }) => {
     setLiveStream(null);
     setShowLiveModal(false);
     setLiveSummary(null);
+
+    // Ensure we delete any live status in backend
+    try {
+      const token = getToken();
+      await fetch(`${API_URL}/api/stories/live`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      fetchStories();
+    } catch (err) {}
   };
 
   const handleSendMyComment = (e) => {
@@ -903,33 +945,47 @@ const Home = ({ onNavigate }) => {
         </button>
 
         {storyFeeds.length > 0 ? (
-          storyFeeds.map((feedItem) => (
-            <button
-              key={feedItem.author_id}
-              onClick={() => {
-                setActiveStoryFeed(feedItem);
-                setActiveStoryIndex(0);
-              }}
-              className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer"
-            >
-              <div className="w-14 h-14 rounded-full p-[2.5px] bg-gradient-to-tr from-amber-400 via-pink-500 to-indigo-500 animate-pulse-slow">
-                {feedItem.author_avatar ? (
-                  <img
-                    src={feedItem.author_avatar.startsWith('http') ? feedItem.author_avatar : `${API_URL}${feedItem.author_avatar}`}
-                    alt={feedItem.author_name}
-                    className="w-full h-full object-cover rounded-full border-2 border-slate-950"
-                  />
-                ) : (
-                  <div className="w-full h-full rounded-full border-2 border-slate-950 bg-slate-800 flex items-center justify-center font-bold text-xs text-indigo-400 uppercase">
-                    {feedItem.author_name.charAt(0)}
+          storyFeeds.map((feedItem) => {
+            const isLive = feedItem.stories.some(s => s.media_type === 'live');
+            return (
+              <button
+                key={feedItem.author_id}
+                onClick={() => {
+                  setActiveStoryFeed(feedItem);
+                  setActiveStoryIndex(0);
+                }}
+                className="flex flex-col items-center gap-1.5 flex-shrink-0 cursor-pointer"
+              >
+                <div className="relative">
+                  <div className={`w-14 h-14 rounded-full p-[2.5px] ${
+                    isLive 
+                      ? 'bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 animate-pulse' 
+                      : 'bg-gradient-to-tr from-amber-400 via-pink-500 to-indigo-500 animate-pulse-slow'
+                  }`}>
+                    {feedItem.author_avatar ? (
+                      <img
+                        src={feedItem.author_avatar.startsWith('http') ? feedItem.author_avatar : `${API_URL}${feedItem.author_avatar}`}
+                        alt={feedItem.author_name}
+                        className="w-full h-full object-cover rounded-full border-2 border-slate-950"
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-full border-2 border-slate-950 bg-slate-800 flex items-center justify-center font-bold text-xs text-indigo-400 uppercase">
+                        {feedItem.author_name.charAt(0)}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <span className="text-[10px] text-slate-300 font-medium truncate w-14 text-center">
-                {feedItem.author_name.split(' ')[0]}
-              </span>
-            </button>
-          ))
+                  {isLive && (
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[7px] font-black px-1 py-0.5 rounded-full border border-slate-950 uppercase tracking-widest leading-none scale-90 shadow-md">
+                      LIVE
+                    </div>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-300 font-medium truncate w-14 text-center">
+                  {feedItem.author_name.split(' ')[0]}
+                </span>
+              </button>
+            );
+          })
         ) : (
           <span className="text-[10px] text-slate-500 italic py-4 pl-2 text-center">No active stories</span>
         )}
@@ -1283,7 +1339,37 @@ const Home = ({ onNavigate }) => {
           </div>
 
           <div className="flex-1 flex items-center justify-center p-2 relative">
-            {activeStoryFeed.stories[activeStoryIndex].media_type === 'video' || /\.(mp4|webm|mov)$/i.test(activeStoryFeed.stories[activeStoryIndex].media_url) ? (
+            {activeStoryFeed.stories[activeStoryIndex].media_type === 'live' ? (
+              <div className="relative max-h-[70vh] aspect-[9/16] max-w-sm w-full bg-slate-950 rounded-2xl border border-slate-900 overflow-hidden flex flex-col justify-between shadow-2xl p-4">
+                {/* Live Stream simulated camera output */}
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60">
+                  <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 animate-pulse">
+                    <Video className="w-8 h-8 text-indigo-400" />
+                  </div>
+                  <span className="absolute text-[10px] text-slate-400 font-black uppercase tracking-widest mt-24">Connecting Stream...</span>
+                </div>
+                
+                {/* Floating Live indicators */}
+                <div className="absolute top-4 left-4 flex items-center gap-2 z-30">
+                  <span className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded uppercase tracking-wider animate-pulse">LIVE</span>
+                  <span className="bg-black/60 backdrop-blur-sm text-slate-300 font-bold text-[9px] px-2 py-0.5 rounded">👀 14 viewers</span>
+                </div>
+
+                {/* Live Simulated chat ticker */}
+                <div className="absolute bottom-4 left-4 right-4 max-h-[25vh] overflow-y-auto z-30 space-y-2 pointer-events-none select-none bg-gradient-to-t from-black/90 to-transparent p-3 rounded-xl flex flex-col justify-end">
+                  {[
+                    { sender: 'Rigzin Angmo', message: 'Campaign is live! 🏔️' },
+                    { sender: 'Tashi Dorjay', message: 'Support from Ladakh! ✊' },
+                    { sender: 'Aman Singh', message: 'Supporting the campaign live!' }
+                  ].map((comment, idx) => (
+                    <div key={idx} className="text-[10px] leading-relaxed">
+                      <span className="font-black text-indigo-400 mr-1.5">{comment.sender}:</span>
+                      <span className="text-slate-100">{comment.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : activeStoryFeed.stories[activeStoryIndex].media_type === 'video' || /\.(mp4|webm|mov)$/i.test(activeStoryFeed.stories[activeStoryIndex].media_url) ? (
               <div className="relative max-h-[70vh] rounded-2xl border border-slate-900 overflow-hidden flex items-center justify-center shadow-2xl">
                 <video 
                   src={`${activeStoryFeed.stories[activeStoryIndex].media_url.startsWith('http') ? '' : API_URL}${activeStoryFeed.stories[activeStoryIndex].media_url}`} 

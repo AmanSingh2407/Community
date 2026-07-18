@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const { createStory, getStoriesFeed } = require('../controllers/storyController');
+const { createStory, getStoriesFeed, endLiveStory } = require('../controllers/storyController');
 const { verifyToken } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -29,5 +29,6 @@ const mediaUpload = upload.fields([
 // Routes
 router.get('/feed', getStoriesFeed);
 router.post('/', verifyToken, mediaUpload, createStory);
+router.delete('/live', verifyToken, endLiveStory);
 
 module.exports = router;

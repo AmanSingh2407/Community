@@ -35,6 +35,9 @@ const createStory = async (req, res, next) => {
       if (/\.(mp4|webm|mov)$/i.test(mediaUrl)) {
         mediaType = 'video';
       }
+    } else if (req.body.media_type === 'live') {
+      mediaType = 'live';
+      mediaUrl = 'live_stream';
     }
 
     if (!mediaUrl) {
@@ -52,23 +55,55 @@ const createStory = async (req, res, next) => {
     }
 
     const storyId = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 Hours Expiry
+    // Live streams expire in 2 hours automatically if not closed properly
+    const expiresAt = mediaType === 'live' 
+      ? new Date(Date.now() + 2 * 60 * 60 * 1000) 
+      : new Date(Date.now() + 24 * 60 * 60 * 1000); 
 
     await db.query(
       'INSERT INTO stories (id, author_id, media_url, media_type, stickers, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
       [storyId, authorId, mediaUrl, mediaType, stickers, expiresAt]
     );
 
-    // Award +20 points for posting a story (using gamification utility)
-    const result = await updateUserPointsAndRank(authorId, 20, 'create_story');
+    // Award points (20 for story, 50 for live broadcast)
+    const pointsAwarded = mediaType === 'live' ? 50 : 20;
+    const transactionId = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO points_transactions (id, user_id, action_type, points) VALUES (?, ?, ?, ?)',
+      [transactionId, authorId, mediaType === 'live' ? 'live_broadcast' : 'create_story', pointsAwarded]
+    );
+    await db.query('UPDATE users SET points = points + ? WHERE id = ?', [pointsAwarded, authorId]);
+
+    // Check rank updates
+    const [userData] = await db.query('SELECT points, rank_tier FROM users WHERE id = ?', [authorId]);
+    const currentPoints = userData[0].points;
+    const { getRankTier } = require('../utils/gamification');
+    const rankTier = getRankTier(currentPoints);
+
+    await db.query('UPDATE users SET rank_tier = ? WHERE id = ?', [rankTier, authorId]);
 
     res.status(201).json({
       success: true,
-      message: 'Story posted successfully',
-      points_earned: 20,
-      new_points: result ? result.points : 20,
-      new_rank: result ? result.rank_tier : 'Bronze'
+      message: mediaType === 'live' ? 'Live stream started' : 'Story posted successfully',
+      points_earned: pointsAwarded,
+      new_points: currentPoints,
+      new_rank: rankTier
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// End an active live stream story
+const endLiveStory = async (req, res, next) => {
+  try {
+    const authorId = req.user.id;
+    await db.query(
+      "DELETE FROM stories WHERE author_id = ? AND media_type = 'live'",
+      [authorId]
+    );
+    res.json({ success: true, message: 'Live stream ended successfully' });
   } catch (error) {
     next(error);
   }
