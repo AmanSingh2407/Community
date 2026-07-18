@@ -246,7 +246,36 @@ const getStoriesFeed = async (req, res, next) => {
   }
 };
 
+// Delete a user's own story
+const deleteStory = async (req, res, next) => {
+  try {
+    const storyId = req.params.id;
+    const authorId = req.user.id;
+
+    // Check story existence and ownership
+    const [story] = await db.query('SELECT author_id FROM stories WHERE id = ?', [storyId]);
+    if (!story[0]) {
+      return res.status(404).json({ success: false, error: 'Story not found' });
+    }
+
+    if (story[0].author_id !== authorId) {
+      return res.status(403).json({ success: false, error: 'You are not authorized to delete this story' });
+    }
+
+    await db.query('DELETE FROM stories WHERE id = ?', [storyId]);
+    res.json({ success: true, message: 'Story deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createStory,
-  getStoriesFeed
+  getStoriesFeed,
+  endLiveStory,
+  uploadLiveFrame,
+  getLiveFrame,
+  postLiveComment,
+  getLiveComments,
+  deleteStory
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth, API_URL } from '../context/AuthContext';
-import { Users, Video, BookOpen, MapPin, TrendingUp, Users2, Heart, Share2, MessageCircle, Camera, X, Upload, Check } from 'lucide-react';
+import { Users, Video, BookOpen, MapPin, TrendingUp, Users2, Heart, Share2, MessageCircle, Camera, X, Upload, Check, Trash2 } from 'lucide-react';
 
 const CAROUSEL_SLIDES = [
   {
@@ -1414,12 +1414,51 @@ const Home = ({ onNavigate }) => {
               </div>
               <span className="text-xs font-bold text-white">{activeStoryFeed.author_name}</span>
             </div>
-            <button 
-              onClick={() => setActiveStoryFeed(null)} 
-              className="p-1 rounded-full bg-slate-900/60 text-slate-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            
+            <div className="flex items-center gap-2">
+              {/* Show trash icon only if the user is the owner of the story */}
+              {user && activeStoryFeed.author_id === user.id && (
+                <button
+                  onClick={async () => {
+                    const currentStory = activeStoryFeed.stories[activeStoryIndex];
+                    if (!window.confirm('Are you sure you want to delete this story?')) return;
+                    
+                    try {
+                      const token = getToken();
+                      if (currentStory.media_type === 'live') {
+                        await fetch(`${API_URL}/api/stories/live`, {
+                          method: 'DELETE',
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                      } else {
+                        await fetch(`${API_URL}/api/stories/${currentStory.id}`, {
+                          method: 'DELETE',
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                      }
+                      
+                      // Close viewer & refresh feeds
+                      setActiveStoryFeed(null);
+                      setActiveStoryIndex(0);
+                      fetchStories();
+                    } catch (err) {
+                      console.error('Error deleting story:', err);
+                    }
+                  }}
+                  className="p-1.5 rounded-full bg-slate-900/60 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer"
+                  title="Delete Story"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+              
+              <button 
+                onClick={() => setActiveStoryFeed(null)} 
+                className="p-1 rounded-full bg-slate-900/60 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 flex items-center justify-center p-2 relative">

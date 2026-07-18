@@ -8,7 +8,8 @@ const {
   uploadLiveFrame,
   getLiveFrame,
   postLiveComment,
-  getLiveComments
+  getLiveComments,
+  deleteStory
 } = require('../controllers/storyController');
 const { verifyToken } = require('../middleware/authMiddleware');
 
@@ -38,6 +39,7 @@ const mediaUpload = upload.fields([
 router.get('/feed', getStoriesFeed);
 router.post('/', verifyToken, mediaUpload, createStory);
 router.delete('/live', verifyToken, endLiveStory);
+router.delete('/:id', verifyToken, deleteStory);
 
 // Live Stream Frame and Comments Routes
 router.post('/live/frame', verifyToken, uploadLiveFrame);
